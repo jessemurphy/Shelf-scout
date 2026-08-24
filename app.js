@@ -326,6 +326,12 @@ function init() {
     $("set-person").value = s.person || "";
     $("settings-overlay").classList.remove("hidden");
   });
+  $("set-token-show").addEventListener("click", () => {
+    const f = $("set-token");
+    const showing = f.type === "text";
+    f.type = showing ? "password" : "text";
+    $("set-token-show").textContent = showing ? "Show" : "Hide";
+  });
   $("settings-cancel").addEventListener("click",
     () => $("settings-overlay").classList.add("hidden"));
   $("settings-save").addEventListener("click", () => {
