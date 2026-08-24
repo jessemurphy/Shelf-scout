@@ -45,20 +45,21 @@ async function familynet(path) {
   } catch { return { err: "couldn't reach the intranet" }; }
 }
 
-async function googleBooks(params) {
-  // no key needed for volume search; fine for a hand-held lookup rate
-  try {
-    const res = await fetch("https://www.googleapis.com/books/v1/volumes?q=" +
-                            encodeURIComponent(params) + "&maxResults=5");
-    if (!res.ok) return [];
-    const j = await res.json();
-    return (j.items || []).map((it) => {
-      const v = it.volumeInfo || {};
-      return { title: v.title || "", author: (v.authors || []).join(", "),
-               year: (v.publishedDate || "").slice(0, 4),
-               isbn: ((v.industryIdentifiers || []).find((x) => x.type === "ISBN_13") || {}).identifier || "" };
-    }).filter((b) => b.title);
-  } catch { return []; }
+/* Books used to search Google Books from HERE, keyless. Google rate-limits
+   that hard — it answered 429 and the catch turned it into an empty list, so
+   the app silently showed nothing beyond the family's own copies while movies
+   (whose outside search always ran on the server, through OMDb) looked like
+   the only mode that worked. Both now come back from familynet, which holds
+   the API key and falls back to Open Library. */
+async function familynetPost(path, body) {
+  const { url, token } = loadSync();
+  const res = await fetch(url.replace(/\/+$/, "") + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Api-Key": token },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
 }
 
 /* ---------- rendering ---------- */
@@ -112,6 +113,58 @@ function wishBtn(item) {
     data-wish='${esc(JSON.stringify(item))}'>${dis ? "On the wishlist" : "＋ Wishlist"}</button>`;
 }
 
+const readLabel = (item) => (item.kind === "movie" ? "Watched" : "Read");
+
+function rateBtn(item) {
+  return `<button class="ratebtn" data-rate='${esc(JSON.stringify(item))}'
+    >${readLabel(item)}</button>`;
+}
+
+/* "Read" / "Watched": ask for a score and log it as read/watched under the
+   name in ⚙︎, dated today. This is the ONE write that may land on a row that
+   already exists — a wishlist re-send never can — so the server keeps the
+   original read/watch date if there is one and only takes today's for a
+   first sighting. Sent straight away rather than queued like the wishlist:
+   you're standing in front of the thing, and a score you typed and lost
+   would be worse than one that plainly failed. */
+async function rateItem(item, btn) {
+  const { url, token, person } = loadSync();
+  if (!url || !token) return toast("Set the intranet in ⚙︎ first");
+  if (!person) return toast("Set your name in ⚙︎ first");
+  const raw = prompt(`${readLabel(item)} “${item.title}” — your rating out of 10?`);
+  if (raw === null || raw.trim() === "") return;          // cancelled
+  const n = Number(raw.trim());
+  if (!Number.isFinite(n) || n < 0 || n > 10) return toast("A rating is 0 to 10");
+  const label = readLabel(item);
+  btn.disabled = true; btn.textContent = "Saving…";
+  const body = item.kind === "movie"
+    ? { person, title: item.title, year: item.year || "", rating: n }
+    : { person, title: item.title, author: item.author || "", isbn: item.isbn || "", rating: n };
+  try {
+    const r = await familynetPost(
+      item.kind === "movie" ? "/movies/api/scout_add" : "/books/api/scout_add", body);
+    if (!r.ok) {
+      btn.disabled = false; btn.textContent = label;
+      return toast(r.data?.error ? "Refused: " + r.data.error
+                                 : `intranet said ${r.status}`);
+    }
+    btn.textContent = `${label} · ${n}/10`;
+    const when = r.data?.date_read || r.data?.watched_on;
+    // the date only says "today" for a first sighting; say so when the server
+    // kept an older one, so it doesn't look like the wrong date was written.
+    // Built from LOCAL parts — toISOString() would roll a late-evening rating
+    // onto tomorrow and report every one of them as "still dated".
+    const t = new Date();
+    const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`
+                + `-${String(t.getDate()).padStart(2, "0")}`;
+    toast(when && when !== today ? `Saved · ${n}/10, still dated ${when}`
+                                 : `Saved · ${n}/10`);
+  } catch {
+    btn.disabled = false; btn.textContent = label;
+    toast("Couldn't reach the intranet");
+  }
+}
+
 function readerChips(rows, kind) {
   return `<div class="readers">` + rows.map((r) => {
     const rating = r.rating != null ? ` · ${r.rating}/10` : "";
@@ -129,7 +182,8 @@ function readerChips(rows, kind) {
 function card(cls, title, sub, verdictHtml, chipsHtml, item) {
   return `<div class="card ${cls}">
     <div class="title">${esc(title)}${sub ? ` <span class="sub">· ${esc(sub)}</span>` : ""}</div>
-    <div class="cardfoot">${verdictHtml}${item ? wishBtn(item) : ""}</div>
+    <div class="cardfoot">${verdictHtml}${item
+      ? `<span class="cardacts">${rateBtn(item)}${wishBtn(item)}</span>` : ""}</div>
     ${chipsHtml}
   </div>`;
 }
@@ -146,6 +200,9 @@ function setResults(html) {
       syncWish(item);
     });
   }
+  for (const b of $("results").querySelectorAll(".ratebtn[data-rate]")) {
+    b.addEventListener("click", () => rateItem(JSON.parse(b.getAttribute("data-rate")), b));
+  }
 }
 
 function status(msg, err) {
@@ -156,36 +213,32 @@ function status(msg, err) {
 
 async function lookupIsbn(isbn) {
   status("Checking the shelves…");
-  const [fam, gb] = await Promise.all([
-    familynet(`/books/api/scout?isbn=${encodeURIComponent(isbn)}`),
-    googleBooks(`isbn:${isbn}`),
-  ]);
+  const fam = await familynet(`/books/api/scout?isbn=${encodeURIComponent(isbn)}`);
   const logs = fam.data?.logs || [];
-  const meta = fam.data?.meta || gb[0] || null;
+  const meta = fam.data?.meta || null;
   const title = logs[0]?.title || meta?.title || `ISBN ${isbn}`;
   const author = logs[0]?.author || meta?.author || "";
   const item = { kind: "book", title, author, isbn };
   let html = "";
   if (logs.length) {
     html = card("owned", title, author,
-      `<div class="verdict own">Already on the family shelf</div>`,
+      `<div class="verdict own">On the family shelf</div>`,
       readerChips(logs, "book"), item);
   } else {
-    const why = fam.off ? "collection check is off — set the intranet in ⚙︎"
-      : fam.err ? `couldn't check the collection (${fam.err})`
-      : "nobody in the family has it";
+    // only the CAN'T-CHECK cases spell themselves out (they're rare, and the
+    // reason is the whole message); a plain miss stays short so the verdict
+    // and the two buttons share one line
+    const why = fam.off ? " — collection check is off, set the intranet in ⚙︎"
+      : fam.err ? ` — couldn't check (${fam.err})` : "";
     html = card("unowned", title, author,
-      `<div class="verdict not">Not on the shelf — ${esc(why)}</div>`, "", item);
+      `<div class="verdict not">Not on the shelf${esc(why)}</div>`, "", item);
   }
   setResults(html);
 }
 
 async function searchBooks(q) {
   status("Searching…");
-  const [fam, gb] = await Promise.all([
-    familynet(`/books/api/scout?q=${encodeURIComponent(q)}`),
-    googleBooks(q),
-  ]);
+  const fam = await familynet(`/books/api/scout?q=${encodeURIComponent(q)}`);
   const logs = fam.data?.logs || [];
   // group family logs per (title, author)
   const groups = new Map();
@@ -202,7 +255,7 @@ async function searchBooks(q) {
       { kind: "book", title: g.title, author: g.author });
   }
   const ownedTitles = new Set([...groups.values()].map((g) => g.title.toLowerCase()));
-  for (const b of gb.filter((x) => !ownedTitles.has(x.title.toLowerCase()))) {
+  for (const b of (fam.data?.outside || []).filter((x) => !ownedTitles.has(x.title.toLowerCase()))) {
     const sub = [b.author, b.year].filter(Boolean).join(" · ");
     html += card("unowned", b.title, sub,
       `<div class="verdict not">Not on the shelf</div>`, "",
@@ -227,8 +280,10 @@ async function searchMovies(q) {
   for (const m of fam.data.movies || []) {
     const rated = m.ratings.filter((r) => r.rating != null);
     const watchlist = rated.length === 0;
+    // short on purpose: the verdict shares its line with two buttons, and the
+    // chips underneath already say who rated it and how highly
     html += card("owned", m.title, m.year,
-      `<div class="verdict own">${watchlist ? "On the family watchlist" : "Already rated in the collection"}</div>`,
+      `<div class="verdict own">${watchlist ? "On the watchlist" : "In the collection"}</div>`,
       readerChips(rated.length ? rated : m.ratings, "movie"),
       { kind: "movie", title: m.title, year: m.year });
   }

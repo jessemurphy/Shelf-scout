@@ -88,10 +88,20 @@ h1::before{content:"";display:inline-block;width:9px;height:20px;margin-right:9p
   display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
   gap:6px 10px;margin-top:4px;
 }
+/* the two actions travel together, so a narrow card wraps them as a pair
+   rather than stranding one of them under the verdict */
+.cardacts{display:flex;align-items:center;gap:6px;}
 .wishbtn{
   font-size:12.5px;padding:6px 12px;border-radius:999px;
   background:none;border:1px solid var(--amber);color:var(--amber);
 }
+/* green like the "on the shelf" verdict: this is the button that puts it
+   there, as against amber's "some day" */
+.ratebtn{
+  font-size:12.5px;padding:6px 12px;border-radius:999px;
+  background:none;border:1px solid var(--green);color:var(--green);
+}
+.ratebtn:disabled{border-color:var(--line-strong);color:var(--muted);}
 .wishbtn:disabled{border-color:var(--line-strong);color:var(--muted);}
 .status{font-size:14px;color:var(--muted);padding:4px 2px;}
 .status.err{color:var(--red);}
