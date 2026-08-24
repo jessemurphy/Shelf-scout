@@ -108,8 +108,8 @@ async function flushWishlist() {
 
 function wishBtn(item) {
   const dis = inWishlist(item);
-  return `<div class="cardrow"><button class="wishbtn" ${dis ? "disabled" : ""}
-    data-wish='${esc(JSON.stringify(item))}'>${dis ? "On the wishlist" : "＋ Wishlist"}</button></div>`;
+  return `<button class="wishbtn" ${dis ? "disabled" : ""}
+    data-wish='${esc(JSON.stringify(item))}'>${dis ? "On the wishlist" : "＋ Wishlist"}</button>`;
 }
 
 function readerChips(rows, kind) {
@@ -122,12 +122,15 @@ function readerChips(rows, kind) {
   }).join("") + `</div>`;
 }
 
+/* Three rows, not five: the year/author rides with the title, and the verdict
+   shares a row with the wishlist button. Standing in a store with the keyboard
+   up you can only see the top ~470pt of the page, so every merged row is
+   another result you can compare without dismissing the keyboard. */
 function card(cls, title, sub, verdictHtml, chipsHtml, item) {
   return `<div class="card ${cls}">
-    <div class="title">${esc(title)}</div>
-    ${sub ? `<div class="sub">${esc(sub)}</div>` : ""}
-    ${verdictHtml}${chipsHtml}
-    ${item ? wishBtn(item) : ""}
+    <div class="title">${esc(title)}${sub ? ` <span class="sub">· ${esc(sub)}</span>` : ""}</div>
+    <div class="cardfoot">${verdictHtml}${item ? wishBtn(item) : ""}</div>
+    ${chipsHtml}
   </div>`;
 }
 

@@ -2,7 +2,7 @@
    next load, cache fallback so it opens offline in a store with no signal.
    Only same-origin GETs are cached — familynet and Google Books lookups
    pass straight through. */
-const CACHE = "scout-v4";
+const CACHE = "scout-v5";
 const ASSETS = ["./", "./index.html", "./style.css", "./app.js",
                 "./vendor/zxing.min.js", "./manifest.json",
                 "./icons/icon-192.png", "./icons/icon-512.png"];
