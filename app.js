@@ -107,7 +107,31 @@ async function flushWishlist() {
   for (const w of wishlist) if (!w.synced) await syncWish(w);
 }
 
-function wishBtn(item) {
+/* What the person in ⚙︎ has already done with this one, read off familynet's
+   OWN rows rather than the local wishlist. A card lists the whole family, so
+   "somebody has read it" is the wrong test for whether YOUR buttons still
+   apply: three people rating Rambo says nothing about whether you did.
+   Without a name configured there's nobody to check, so the buttons stay
+   live. */
+function myRow(rows, kind) {
+  const { person } = loadSync();
+  if (!person || !rows || !rows.length) return null;
+  const r = rows.find((x) => (x.username || "").toLowerCase() === person.toLowerCase());
+  if (!r) return null;
+  // a movie row with no score is a watchlist entry; a book is read when it's
+  // on the read shelf, score or not (plenty of the Goodreads imports have none)
+  return { done: kind === "movie" ? r.rating != null : r.shelf === "read",
+           rating: r.rating };
+}
+
+function wishBtn(item, mine) {
+  if (mine) {
+    // you already have a row: the server would refuse to touch it anyway, so
+    // say what it is instead of offering to file it again
+    return `<button class="wishbtn" disabled>${mine.done
+      ? (item.kind === "movie" ? "In your log" : "On your shelf")
+      : (item.kind === "movie" ? "On your list" : "On your list")}</button>`;
+  }
   const dis = inWishlist(item);
   return `<button class="wishbtn" ${dis ? "disabled" : ""}
     data-wish='${esc(JSON.stringify(item))}'>${dis ? "On the wishlist" : "＋ Wishlist"}</button>`;
@@ -115,7 +139,13 @@ function wishBtn(item) {
 
 const readLabel = (item) => (item.kind === "movie" ? "Watched" : "Read");
 
-function rateBtn(item) {
+function rateBtn(item, mine) {
+  if (mine && mine.done) {
+    // disabled, but still worth reading: your own score is the thing you came
+    // to the shelf to remember
+    return `<button class="ratebtn" disabled>${readLabel(item)}${
+      mine.rating != null ? ` · ${mine.rating}/10` : ""}</button>`;
+  }
   return `<button class="ratebtn" data-rate='${esc(JSON.stringify(item))}'
     >${readLabel(item)}</button>`;
 }
@@ -149,6 +179,13 @@ async function rateItem(item, btn) {
                                  : `intranet said ${r.status}`);
     }
     btn.textContent = `${label} · ${n}/10`;
+    // you've just logged it, so the wishlist offer beside it no longer applies
+    // — same end state a fresh search would render
+    const wish = btn.parentElement?.querySelector(".wishbtn");
+    if (wish) {
+      wish.disabled = true;
+      wish.textContent = item.kind === "movie" ? "In your log" : "On your shelf";
+    }
     const when = r.data?.date_read || r.data?.watched_on;
     // the date only says "today" for a first sighting; say so when the server
     // kept an older one, so it doesn't look like the wrong date was written.
@@ -179,11 +216,11 @@ function readerChips(rows, kind) {
    shares a row with the wishlist button. Standing in a store with the keyboard
    up you can only see the top ~470pt of the page, so every merged row is
    another result you can compare without dismissing the keyboard. */
-function card(cls, title, sub, verdictHtml, chipsHtml, item) {
+function card(cls, title, sub, verdictHtml, chipsHtml, item, mine) {
   return `<div class="card ${cls}">
     <div class="title">${esc(title)}${sub ? ` <span class="sub">· ${esc(sub)}</span>` : ""}</div>
     <div class="cardfoot">${verdictHtml}${item
-      ? `<span class="cardacts">${rateBtn(item)}${wishBtn(item)}</span>` : ""}</div>
+      ? `<span class="cardacts">${rateBtn(item, mine)}${wishBtn(item, mine)}</span>` : ""}</div>
     ${chipsHtml}
   </div>`;
 }
@@ -223,7 +260,7 @@ async function lookupIsbn(isbn) {
   if (logs.length) {
     html = card("owned", title, author,
       `<div class="verdict own">On the family shelf</div>`,
-      readerChips(logs, "book"), item);
+      readerChips(logs, "book"), item, myRow(logs, "book"));
   } else {
     // only the CAN'T-CHECK cases spell themselves out (they're rare, and the
     // reason is the whole message); a plain miss stays short so the verdict
@@ -252,7 +289,8 @@ async function searchBooks(q) {
     html += card("owned", g.title, g.author,
       `<div class="verdict own">On the family shelf</div>`,
       readerChips(g.rows, "book"),
-      { kind: "book", title: g.title, author: g.author });
+      { kind: "book", title: g.title, author: g.author },
+      myRow(g.rows, "book"));
   }
   const ownedTitles = new Set([...groups.values()].map((g) => g.title.toLowerCase()));
   for (const b of (fam.data?.outside || []).filter((x) => !ownedTitles.has(x.title.toLowerCase()))) {
@@ -285,7 +323,8 @@ async function searchMovies(q) {
     html += card("owned", m.title, m.year,
       `<div class="verdict own">${watchlist ? "On the watchlist" : "In the collection"}</div>`,
       readerChips(rated.length ? rated : m.ratings, "movie"),
-      { kind: "movie", title: m.title, year: m.year });
+      { kind: "movie", title: m.title, year: m.year },
+      myRow(m.ratings, "movie"));
   }
   for (const h of fam.data.outside || []) {
     html += card("unowned", h.title, h.year,
