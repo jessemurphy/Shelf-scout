@@ -39,6 +39,7 @@ async function familynet(path) {
   try {
     const res = await fetch(url.replace(/\/+$/, "") + path,
                             { headers: { "X-Api-Key": token } });
+    if (res.status === 404) return { err: "the intranet doesn't have Shelf Scout support yet — familynet needs its update deployed" };
     if (!res.ok) return { err: `intranet said ${res.status}` };
     return { data: await res.json() };
   } catch { return { err: "couldn't reach the intranet" }; }
