@@ -43,7 +43,7 @@
     <p id="wish-empty" class="empty">Nothing saved yet. Anything you look up can be kept here.</p>
   </section>
 
-  <footer class="foot">Shelf Scout v1 · your wishlist stays on this device</footer>
+  <footer class="foot">Shelf Scout v2</footer>
 </div>
 
 <!-- camera scanner sheet -->
@@ -60,9 +60,10 @@
 <div id="settings-overlay" class="overlay hidden">
   <div class="sheet">
     <h2>Family collection</h2>
-    <p class="note">Same intranet address and device token as Waypoint. Leave blank to use Shelf Scout offline-only (wishlist still works; the "already own it?" check doesn't).</p>
+    <p class="note">Same intranet address and device token as Waypoint. Wishlist items are added to familynet as YOUR to-read shelf / movie watchlist, so the username matters. Leave it all blank to use Shelf Scout offline-only.</p>
     <label>Intranet URL<input id="set-url" type="url" placeholder="https://…" autocomplete="off"></label>
     <label>Device token<input id="set-token" type="password" autocomplete="off"></label>
+    <label>Your familynet username<input id="set-person" type="text" autocomplete="off" autocapitalize="none"></label>
     <div class="sheetrow">
       <button id="settings-cancel" class="quiet">Cancel</button>
       <button id="settings-save" class="gobtn">Save</button>

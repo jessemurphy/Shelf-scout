@@ -65,7 +65,44 @@ async function googleBooks(params) {
 function inWishlist(item) {
   return wishlist.some((w) => w.kind === item.kind &&
     w.title.toLowerCase() === item.title.toLowerCase() &&
-    (w.sub || "") === (item.sub || ""));
+    (w.author || w.year || "") === (item.author || item.year || ""));
+}
+
+/* Each wishlist item also lands in familynet as the SENDER's to-read
+   shelf entry (books) or watchlist row (movies) — attributed by the
+   username in settings, retried until it succeeds, and idempotent
+   server-side (an existing copy on any shelf, or an existing rating, is
+   never touched, so re-sends are harmless). */
+async function syncWish(w) {
+  const { url, token, person } = loadSync();
+  if (!url || !token || !person || w.synced) return;
+  const path = w.kind === "movie" ? "/movies/api/scout_add" : "/books/api/scout_add";
+  const body = w.kind === "movie"
+    ? { person, title: w.title, year: w.year || "" }
+    : { person, title: w.title, author: w.author || "", isbn: w.isbn || "" };
+  try {
+    const res = await fetch(url.replace(/\/+$/, "") + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Api-Key": token },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      const j = await res.json().catch(() => ({}));
+      w.synced = true;
+      w.where = j.added === false
+        ? (w.kind === "movie" ? (j.status === "rated" ? "already rated" : "already on your watchlist")
+                              : `already on your ${j.shelf || ""} shelf`)
+        : (w.kind === "movie" ? "on your watchlist" : "on your to-read shelf");
+      saveWish(); renderWishlist();
+    } else if (res.status === 400) {
+      const j = await res.json().catch(() => null);
+      if (j && j.error) toast("Sync refused: " + j.error);
+    }
+  } catch { /* offline — stays queued for the next open */ }
+}
+
+async function flushWishlist() {
+  for (const w of wishlist) if (!w.synced) await syncWish(w);
 }
 
 function wishBtn(item) {
@@ -97,10 +134,12 @@ function setResults(html) {
   $("results").innerHTML = html;
   for (const b of $("results").querySelectorAll(".wishbtn[data-wish]")) {
     b.addEventListener("click", () => {
-      wishlist.unshift(JSON.parse(b.getAttribute("data-wish")));
+      const item = JSON.parse(b.getAttribute("data-wish"));
+      wishlist.unshift(item);
       saveWish(); renderWishlist();
       b.disabled = true; b.textContent = "On the wishlist";
       toast("Saved to wishlist");
+      syncWish(item);
     });
   }
 }
@@ -121,7 +160,7 @@ async function lookupIsbn(isbn) {
   const meta = fam.data?.meta || gb[0] || null;
   const title = logs[0]?.title || meta?.title || `ISBN ${isbn}`;
   const author = logs[0]?.author || meta?.author || "";
-  const item = { kind: "book", title, sub: author, isbn };
+  const item = { kind: "book", title, author, isbn };
   let html = "";
   if (logs.length) {
     html = card("owned", title, author,
@@ -156,14 +195,14 @@ async function searchBooks(q) {
     html += card("owned", g.title, g.author,
       `<div class="verdict own">On the family shelf</div>`,
       readerChips(g.rows, "book"),
-      { kind: "book", title: g.title, sub: g.author });
+      { kind: "book", title: g.title, author: g.author });
   }
   const ownedTitles = new Set([...groups.values()].map((g) => g.title.toLowerCase()));
   for (const b of gb.filter((x) => !ownedTitles.has(x.title.toLowerCase()))) {
     const sub = [b.author, b.year].filter(Boolean).join(" · ");
     html += card("unowned", b.title, sub,
       `<div class="verdict not">Not on the shelf</div>`, "",
-      { kind: "book", title: b.title, sub: b.author, isbn: b.isbn });
+      { kind: "book", title: b.title, author: b.author, isbn: b.isbn });
   }
   if (!html) {
     if (fam.off || fam.err) status(fam.err || "Collection check is off — set the intranet in ⚙︎", !!fam.err);
@@ -187,12 +226,12 @@ async function searchMovies(q) {
     html += card("owned", m.title, m.year,
       `<div class="verdict own">${watchlist ? "On the family watchlist" : "Already rated in the collection"}</div>`,
       readerChips(rated.length ? rated : m.ratings, "movie"),
-      { kind: "movie", title: m.title, sub: m.year });
+      { kind: "movie", title: m.title, year: m.year });
   }
   for (const h of fam.data.outside || []) {
     html += card("unowned", h.title, h.year,
       `<div class="verdict not">Not in the collection</div>`, "",
-      { kind: "movie", title: h.title, sub: h.year });
+      { kind: "movie", title: h.title, year: h.year });
   }
   setResults(html || `<div class="status">Nothing found for that.</div>`);
 }
@@ -229,14 +268,22 @@ function renderWishlist() {
   const el = $("wishlist");
   $("wish-count").textContent = wishlist.length ? `(${wishlist.length})` : "";
   $("wish-empty").style.display = wishlist.length ? "none" : "";
-  el.innerHTML = wishlist.map((w, i) => `<div class="wishrow">
+  const { url, token, person } = loadSync();
+  const canSync = url && token && person;
+  el.innerHTML = wishlist.map((w, i) => {
+    const sub = w.author || w.year || w.sub || "";
+    const state = w.synced ? `✓ ${w.where || "sent to familynet"}`
+      : canSync ? "queued for familynet"
+      : "";
+    return `<div class="wishrow">
       <span class="kind">${w.kind === "movie" ? "🎬" : "📖"}</span>
       <div class="w-main">
         <div class="w-t">${esc(w.title)}</div>
-        ${w.sub ? `<div class="w-s">${esc(w.sub)}</div>` : ""}
+        <div class="w-s">${esc(sub)}${sub && state ? " · " : ""}${esc(state)}</div>
       </div>
       <button class="del" data-i="${i}" aria-label="Remove">✕</button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   for (const b of el.querySelectorAll(".del")) {
     b.addEventListener("click", () => {
       wishlist.splice(Number(b.getAttribute("data-i")), 1);
@@ -276,19 +323,24 @@ function init() {
     const s = loadSync();
     $("set-url").value = s.url || "";
     $("set-token").value = s.token || "";
+    $("set-person").value = s.person || "";
     $("settings-overlay").classList.remove("hidden");
   });
   $("settings-cancel").addEventListener("click",
     () => $("settings-overlay").classList.add("hidden"));
   $("settings-save").addEventListener("click", () => {
     localStorage.setItem(SYNC_KEY, JSON.stringify(
-      { url: $("set-url").value.trim(), token: $("set-token").value.trim() }));
+      { url: $("set-url").value.trim(), token: $("set-token").value.trim(),
+        person: $("set-person").value.trim().toLowerCase() }));
     $("settings-overlay").classList.add("hidden");
     toast("Saved");
+    renderWishlist();
+    flushWishlist();
   });
 
   setMode(mode);
   renderWishlist();
+  flushWishlist();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
