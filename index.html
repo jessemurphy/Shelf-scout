@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shelf Scout</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#181310">
+<meta name="description" content="Standing in the store: does the house already have this? Scan a book or search a movie against the family collection.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shelf Scout">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <h1>Shelf Scout</h1>
+      <button id="settings-btn" class="iconbtn" aria-label="Sync settings">⚙︎</button>
+    </div>
+    <div class="modes">
+      <button id="mode-books" class="mode on">Books</button>
+      <button id="mode-movies" class="mode">Movies</button>
+    </div>
+  </header>
+
+  <section class="lookup">
+    <button id="scan-btn" class="bigbtn">▮▯▮ Scan a barcode</button>
+    <form id="search-form" class="searchrow">
+      <input id="search-q" type="search" placeholder="…or search by title" autocomplete="off">
+      <button type="submit" class="gobtn">Look up</button>
+    </form>
+  </section>
+
+  <section id="results" class="results"></section>
+
+  <section class="wishlist-sec">
+    <h2>Wishlist <span id="wish-count" class="count"></span></h2>
+    <div id="wishlist"></div>
+    <p id="wish-empty" class="empty">Nothing saved yet. Anything you look up can be kept here.</p>
+  </section>
+
+  <footer class="foot">Shelf Scout v1 · your wishlist stays on this device</footer>
+</div>
+
+<!-- camera scanner sheet -->
+<div id="scan-overlay" class="overlay hidden">
+  <div class="scanbox">
+    <video id="scan-video" playsinline></video>
+    <div class="scanline"></div>
+  </div>
+  <p class="scanhint">Point at the barcode on the back cover</p>
+  <button id="scan-cancel" class="cancelbtn">Cancel</button>
+</div>
+
+<!-- sync settings sheet -->
+<div id="settings-overlay" class="overlay hidden">
+  <div class="sheet">
+    <h2>Family collection</h2>
+    <p class="note">Same intranet address and device token as Waypoint. Leave blank to use Shelf Scout offline-only (wishlist still works; the "already own it?" check doesn't).</p>
+    <label>Intranet URL<input id="set-url" type="url" placeholder="https://…" autocomplete="off"></label>
+    <label>Device token<input id="set-token" type="password" autocomplete="off"></label>
+    <div class="sheetrow">
+      <button id="settings-cancel" class="quiet">Cancel</button>
+      <button id="settings-save" class="gobtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="vendor/zxing.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
