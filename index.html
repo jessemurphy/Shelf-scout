@@ -43,7 +43,7 @@
     <p id="wish-empty" class="empty">Nothing saved yet. Anything you look up can be kept here.</p>
   </section>
 
-  <footer class="foot">Shelf Scout v7</footer>
+  <footer class="foot">Shelf Scout v8</footer>
 </div>
 
 <!-- camera scanner sheet -->
@@ -57,6 +57,29 @@
 </div>
 
 <!-- sync settings sheet -->
+<div id="rate-overlay" class="overlay hidden">
+  <div class="sheet">
+    <h2 id="rate-title" class="rate-h">Your rating</h2>
+    <p class="note">Out of 10. Tap a number — nothing to type, and nothing invalid to type.</p>
+    <div id="rate-grid" class="rategrid">
+      <button type="button" data-score="0">0</button>
+      <button type="button" data-score="1">1</button>
+      <button type="button" data-score="2">2</button>
+      <button type="button" data-score="3">3</button>
+      <button type="button" data-score="4">4</button>
+      <button type="button" data-score="5">5</button>
+      <button type="button" data-score="6">6</button>
+      <button type="button" data-score="7">7</button>
+      <button type="button" data-score="8">8</button>
+      <button type="button" data-score="9">9</button>
+      <button type="button" data-score="10">10</button>
+    </div>
+    <div class="sheetrow">
+      <button id="rate-cancel" class="quiet">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="settings-overlay" class="overlay hidden">
   <div class="sheet">
     <h2>Family collection</h2>

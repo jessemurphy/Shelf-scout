@@ -150,6 +150,38 @@ function rateBtn(item, mine) {
     >${readLabel(item)}</button>`;
 }
 
+/* The score, as eleven taps rather than a text field. prompt() meant a
+   keyboard on a phone, a value that had to be validated after the fact, and a
+   native dialog that looks nothing like the rest of the app. A fixed set of
+   buttons can only ever produce a legal score, so the 0-to-10 check below is
+   now belt-and-braces rather than the thing standing between a typo and the
+   database. Resolves to a number, or null if cancelled. */
+function askRating(item) {
+  return new Promise((resolve) => {
+    const ov = $("rate-overlay"), grid = $("rate-grid"), cancel = $("rate-cancel");
+    $("rate-title").textContent = `${readLabel(item)} “${item.title}”`;
+    const finish = (v) => {
+      ov.classList.add("hidden");
+      grid.removeEventListener("click", onPick);
+      cancel.removeEventListener("click", onCancel);
+      ov.removeEventListener("click", onBackdrop);
+      resolve(v);
+    };
+    const onPick = (e) => {
+      const b = e.target.closest("[data-score]");
+      if (b) finish(Number(b.dataset.score));
+    };
+    const onCancel = () => finish(null);
+    // tapping the dark surround is the same as cancelling — the sheet itself
+    // must not close when you miss a button inside it
+    const onBackdrop = (e) => { if (e.target === ov) finish(null); };
+    grid.addEventListener("click", onPick);
+    cancel.addEventListener("click", onCancel);
+    ov.addEventListener("click", onBackdrop);
+    ov.classList.remove("hidden");
+  });
+}
+
 /* "Read" / "Watched": ask for a score and log it as read/watched under the
    name in ⚙︎, dated today. This is the ONE write that may land on a row that
    already exists — a wishlist re-send never can — so the server keeps the
@@ -161,9 +193,8 @@ async function rateItem(item, btn) {
   const { url, token, person } = loadSync();
   if (!url || !token) return toast("Set the intranet in ⚙︎ first");
   if (!person) return toast("Set your name in ⚙︎ first");
-  const raw = prompt(`${readLabel(item)} “${item.title}” — your rating out of 10?`);
-  if (raw === null || raw.trim() === "") return;          // cancelled
-  const n = Number(raw.trim());
+  const n = await askRating(item);
+  if (n === null) return;                                 // cancelled
   if (!Number.isFinite(n) || n < 0 || n > 10) return toast("A rating is 0 to 10");
   const label = readLabel(item);
   btn.disabled = true; btn.textContent = "Saving…";
