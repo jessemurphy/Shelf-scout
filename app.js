@@ -155,11 +155,18 @@ function rateBtn(item, mine) {
    native dialog that looks nothing like the rest of the app. A fixed set of
    buttons can only ever produce a legal score, so the 0-to-10 check below is
    now belt-and-braces rather than the thing standing between a typo and the
-   database. Resolves to a number, or null if cancelled. */
+   database. Resolves to {score, note}, or null if cancelled.
+
+   The note sits ABOVE the grid on purpose: tapping a score is what closes the
+   sheet, so a field below it would only ever be seen by someone who had
+   already finished. It is cleared on every open — a sheet that remembers the
+   last book's note would quietly attach it to the next one. */
 function askRating(item) {
   return new Promise((resolve) => {
     const ov = $("rate-overlay"), grid = $("rate-grid"), cancel = $("rate-cancel");
+    const note = $("rate-note");
     $("rate-title").textContent = `${readLabel(item)} “${item.title}”`;
+    note.value = "";
     const finish = (v) => {
       ov.classList.add("hidden");
       grid.removeEventListener("click", onPick);
@@ -169,7 +176,7 @@ function askRating(item) {
     };
     const onPick = (e) => {
       const b = e.target.closest("[data-score]");
-      if (b) finish(Number(b.dataset.score));
+      if (b) finish({ score: Number(b.dataset.score), note: note.value.trim() });
     };
     const onCancel = () => finish(null);
     // tapping the dark surround is the same as cancelling — the sheet itself
@@ -193,14 +200,19 @@ async function rateItem(item, btn) {
   const { url, token, person } = loadSync();
   if (!url || !token) return toast("Set the intranet in ⚙︎ first");
   if (!person) return toast("Set your name in ⚙︎ first");
-  const n = await askRating(item);
-  if (n === null) return;                                 // cancelled
+  const picked = await askRating(item);
+  if (picked === null) return;                            // cancelled
+  const n = picked.score;
   if (!Number.isFinite(n) || n < 0 || n > 10) return toast("A rating is 0 to 10");
   const label = readLabel(item);
   btn.disabled = true; btn.textContent = "Saving…";
   const body = item.kind === "movie"
     ? { person, title: item.title, year: item.year || "", rating: n }
     : { person, title: item.title, author: item.author || "", isbn: item.isbn || "", rating: n };
+  // familynet turns this into a real comment on the title's own thread, so it
+  // reaches the family's Recent activity. Omitted entirely when blank rather
+  // than sent as "", so the server's own "did a note come?" test stays simple.
+  if (picked.note) body.comment = picked.note;
   try {
     const r = await familynetPost(
       item.kind === "movie" ? "/movies/api/scout_add" : "/books/api/scout_add", body);

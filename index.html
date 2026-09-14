@@ -60,7 +60,10 @@
 <div id="rate-overlay" class="overlay hidden">
   <div class="sheet">
     <h2 id="rate-title" class="rate-h">Your rating</h2>
-    <p class="note">Out of 10. Tap a number — nothing to type, and nothing invalid to type.</p>
+    <p class="note">Out of 10. Tap a number — nothing invalid to type. A note is
+      optional and posts as a comment on the family thread.</p>
+    <input id="rate-note" type="text" maxlength="1000" autocomplete="off"
+           placeholder="Add a note (optional)">
     <div id="rate-grid" class="rategrid">
       <button type="button" data-score="0">0</button>
       <button type="button" data-score="1">1</button>
